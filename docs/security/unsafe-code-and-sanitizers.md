@@ -37,8 +37,22 @@ crates and by `-Zub-checks=yes -Cdebug-assertions=yes` (precondition checks in
 - Nightly at 03:17 UTC and via `workflow_dispatch`.
 - On pull requests only when labelled `security`.
 
-## Self-test
+## Positive controls (self-test)
 
-`sanitizer-self-test` compiles a program with a seeded heap out-of-bounds read
-and fails unless ASan reports `heap-buffer-overflow`, proving the toolchain and
-flags actually detect memory errors.
+A sanitizer job that is misconfigured (wrong target triple, missing nightly
+component, flags that never reach the test binary) can pass green while
+checking nothing. `sanitizer-self-test` runs in the same workflow as the real
+suites and guards against that:
+
+1. It asserts the `miri` and `rust-src` components are installed, failing the job
+   loudly instead of letting later steps degrade.
+2. It compiles a program with a seeded heap out-of-bounds read and **fails
+   unless** ASan reports `heap-buffer-overflow`.
+3. It runs the same program under Miri and **fails unless** Miri reports
+   `Undefined Behavior`.
+
+Each check also fails if the program dies for any other reason, so a crash that
+is not a sanitizer report is not mistaken for detection. Any change to the
+sanitizer flags, target or toolchain in `.github/workflows/sanitizers.yml` must
+be reviewed against these controls: if a real job gains a new sanitizer, add a
+matching seeded-bug control; never make a component install optional.

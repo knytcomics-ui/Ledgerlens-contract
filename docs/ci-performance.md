@@ -59,6 +59,25 @@ Run it locally against the downloaded dataset:
 python3 tools/ci/job_durations.py trend --dataset durations.jsonl --budget .github/ci-budget.json
 ```
 
+### Data quality (#1405)
+
+Audit of `job_durations.py` ingestion and how each risk is handled:
+
+| Risk | Handling |
+|---|---|
+| Retried job / re-run (same `run_id`) | Already-seen `run_id`s are skipped; `validate_record` rejects duplicates. |
+| Cancelled or unfinished job (no timestamps) | Run is rejected and logged, instead of silently dropping the job and understating wall clock. |
+| Runner clock skew (end before start) | Run is rejected (`completed before it started`). |
+| Negative or non-integer durations, job longer than its run | Run is rejected. |
+
+Rejected runs are written to `ci-metrics/rejected.jsonl` with the reasons, and a
+`::warning` is emitted. The `quality` subcommand (run in `ci-metrics.yml` after
+collection) re-validates the whole dataset and summarises the last 30 days of
+rejections in the job summary, so a persistent problem (for example one flaky
+runner type) stays visible. Review this report whenever this document is
+maintained. `python3 tools/ci/job_durations.py selftest` feeds malformed,
+duplicate and valid records through the validators and runs in CI.
+
 ## Wall-clock budget
 
 Budgets live in [`.github/ci-budget.json`](../.github/ci-budget.json):

@@ -16,6 +16,7 @@ on:
       - "docs/**"
       - "*.md"
       - "tools/docs-site/**"
+      - "tools/check_doc_snippets.py"
       - "contracts/ledgerlens-score/src/**"
       - ".github/workflows/docs.yml"
   schedule:
@@ -35,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Docs build failure-loudness tests
+        run: python3 tools/docs-site/test_failure_loud.py
 
       - name: Broken internal links fail CI
         run: python3 tools/docs-site/check_links.py

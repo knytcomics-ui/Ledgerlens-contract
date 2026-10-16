@@ -117,13 +117,10 @@ jobs:
         id: triage
         run: |
           cmd=$(sed -n 's/^cmd=//p' crash/meta)
-          # Signature: first panic/error line with numbers and addresses stripped.
-          line=$(grep -m1 -E 'panicked|Error|error:|FAIL|mismatch' crash/log.txt || tail -n1 crash/log.txt)
-          sig=$(echo "$line" | sed -E 's/0x[0-9a-fA-F]+//g; s/[0-9]+//g' | sha256sum | cut -c1-12)
-          severity=normal
-          if grep -qiE 'get_score|read_|query|view|oracle|invariant|security' crash/log.txt; then
-            severity=high
-          fi
+          # Signature and severity: tools/ci/fuzz_triage.py (unit-tested in CI).
+          python3 tools/ci/fuzz_triage.py triage crash/log.txt > crash/triage.txt
+          sig=$(sed -n 's/^sig=//p' crash/triage.txt)
+          severity=$(sed -n 's/^severity=//p' crash/triage.txt)
           cp -r "$CORPUS_DIR" crash/corpus
           printf '%s\n' "$cmd" > crash/REPRODUCE.txt
           { echo "sig=$sig"; echo "severity=$severity"; echo "cmd=$cmd"; } >> "$GITHUB_OUTPUT"

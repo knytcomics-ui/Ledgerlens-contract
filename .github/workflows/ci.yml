@@ -371,6 +371,12 @@ jobs:
         run: python3 tools/check_doc_snippets.py --self-test
       - name: Check README and integration-guide snippets
         run: python3 tools/check_doc_snippets.py
+      - name: Docs build failure-loudness (#1404)
+        run: python3 tools/docs-site/test_failure_loud.py
+      - name: CI tooling self-tests (fuzz triage #1403, metrics validation #1405)
+        run: |
+          python3 tools/ci/fuzz_triage.py selftest
+          python3 tools/ci/job_durations.py selftest
 
   build:
     name: WASM build

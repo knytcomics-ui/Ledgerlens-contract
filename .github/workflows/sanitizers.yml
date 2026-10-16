@@ -67,14 +67,20 @@ jobs:
           --target x86_64-unknown-linux-gnu -p ${{ matrix.crate }}
 
   sanitizer-self-test:
-    name: Sanitizer self-test (seeded out-of-bounds)
+    name: Sanitizer positive controls (seeded UB must be caught)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'security')
     runs-on: ubuntu-latest
     steps:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.NIGHTLY }}
-      - name: ASan must detect a seeded heap out-of-bounds read
+          components: miri, rust-src
+      - name: Toolchain components must be present (fail loudly, never fall back)
+        run: |
+          rustup component list --toolchain "$NIGHTLY" --installed | grep -E '^(miri|rust-src)' | sort -u | tee components.txt
+          grep -q '^miri' components.txt || { echo "::error::miri component missing; Miri jobs would not run"; exit 1; }
+          grep -q '^rust-src' components.txt || { echo "::error::rust-src missing; -Zbuild-std ASan jobs would not run"; exit 1; }
+      - name: Write seeded-UB program
         run: |
           cat > oob.rs <<'RS'
           fn main() {
@@ -85,11 +91,28 @@ jobs:
               println!("{x}");
           }
           RS
+      - name: ASan must detect a seeded heap out-of-bounds read
+        run: |
           rustc +${{ env.NIGHTLY }} -Zsanitizer=address -Copt-level=0 \
             --target x86_64-unknown-linux-gnu oob.rs -o oob
           if ./oob 2> asan.log; then
-            echo "::error::ASan failed to detect the seeded out-of-bounds read"
+            echo "::error::ASan failed to detect the seeded out-of-bounds read (sanitizer silently inactive?)"
             exit 1
           fi
-          grep -q "heap-buffer-overflow" asan.log
+          grep -q "heap-buffer-overflow" asan.log \
+            || { echo "::error::program failed but not with an ASan report"; cat asan.log; exit 1; }
           echo "OK: seeded out-of-bounds read detected by ASan."
+      - name: Miri must detect the same seeded out-of-bounds read
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: |
+          cargo +${{ env.NIGHTLY }} miri setup
+          mkdir -p miri-ctl/src && cp oob.rs miri-ctl/src/main.rs
+          printf '[package]\nname = "miri-ctl"\nversion = "0.0.0"\nedition = "2021"\n[workspace]\n' > miri-ctl/Cargo.toml
+          if (cd miri-ctl && cargo +${{ env.NIGHTLY }} miri run 2> ../miri.log); then
+            echo "::error::Miri failed to detect the seeded out-of-bounds read"
+            exit 1
+          fi
+          grep -q "Undefined Behavior" miri.log \
+            || { echo "::error::program failed but not with a Miri UB report"; cat miri.log; exit 1; }
+          echo "OK: seeded out-of-bounds read detected by Miri."

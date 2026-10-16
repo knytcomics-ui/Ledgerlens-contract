@@ -39,9 +39,21 @@ AUDIENCES = [
 ]
 
 
+class BuildError(SystemExit):
+    """A broken reference: fail the build naming it, never publish degraded content."""
+
+    def __init__(self, msg: str):
+        super().__init__(f"error: docs build failed: {msg}")
+
+
 def contract_version() -> str:
-    src = (ROOT / "contracts/ledgerlens-score/src/constants.rs").read_text()
-    return re.search(r"CONTRACT_VERSION: u32 = (\d+);", src).group(1)
+    path = ROOT / "contracts/ledgerlens-score/src/constants.rs"
+    if not path.is_file():
+        raise BuildError(f"referenced source file missing: {path.relative_to(ROOT)}")
+    m = re.search(r"CONTRACT_VERSION: u32 = (\d+);", path.read_text())
+    if not m:
+        raise BuildError(f"`CONTRACT_VERSION: u32` not found in {path.relative_to(ROOT)} (renamed or removed?)")
+    return m.group(1)
 
 
 def title(path: Path) -> str:
@@ -60,14 +72,24 @@ def audience(rel: str) -> str:
 
 
 def main() -> None:
+    global ROOT, DOCS
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "target/docs-site"))
     ap.add_argument("--version", default="latest", help="site version label, e.g. v1.2.0 or latest")
+    ap.add_argument("--root", help="repository root (tests only)")
     args = ap.parse_args()
+
+    if args.root:
+        ROOT = Path(args.root).resolve()
+        DOCS = ROOT / "docs"
+    for needed in (DOCS, ROOT / "README.md"):
+        if not needed.exists():
+            raise BuildError(f"referenced document missing: {needed.relative_to(ROOT)}")
+    cv = contract_version()  # resolve before touching the output dir
 
     out = Path(args.out)
     src = out / "src"
-    shutil.rmtree(out, ignore_errors=True)
+    shutil.rmtree(out, ignore_errors=True)  # never fall back to a previous build's output
     shutil.copytree(DOCS, src)
     shutil.copy(ROOT / "README.md", src / "introduction.md")
     (src / "api").mkdir(exist_ok=True)
@@ -76,7 +98,6 @@ def main() -> None:
         "[ledgerlens_score](ledgerlens_score/index.html).\n"
     )
 
-    cv = contract_version()
     default_banner = f"contract v{cv} (`CONTRACT_VERSION = {cv}`), docs {args.version}"
     groups: dict[str, list[tuple[str, str]]] = {n: [] for n, _ in AUDIENCES}
     groups["Reference"] = []

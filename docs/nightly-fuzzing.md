@@ -25,10 +25,12 @@ When a run fails:
 
 - A reproducer bundle (`crash/`: log, corpus snapshot, `REPRODUCE.txt`) is uploaded as the
   `fuzz-crash-<sig>` artifact.
-- `<sig>` is a hash of the first failing line with numbers and hex values removed. Repeated crashes
+- `<sig>` is a hash of the first failing line with hex addresses, timestamps, durations and seed/case counters removed (`tools/ci/fuzz_triage.py`); file:line and the message are kept, so a different fault never merges into an existing issue. Repeated crashes
   therefore map to one open issue titled `fuzz crash [<sig>]`: a new crash opens that issue, and a repeat adds a comment to it.
 - Crashes whose log mentions read entry points (`get_score`, `read_*`, query/view) or security
   oracles/invariants also get the `severity:high` label.
+
+The signature and the create-vs-update decision are unit-tested without a real fuzzer crash (`python3 tools/ci/fuzz_triage.py selftest`, run in the `doc-snippets` CI job), including a two-run sequence with one repeated and one new crash.
 
 To reproduce, download the artifact into the repository root and run the command in `REPRODUCE.txt`.
 

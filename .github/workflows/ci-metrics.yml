@@ -39,6 +39,8 @@ jobs:
         run: python3 tools/ci/job_durations.py collect --dataset ci-metrics/durations.jsonl --workflow ci.yml --branch main
       - name: Trend summary and budget check
         run: python3 tools/ci/job_durations.py trend --dataset ci-metrics/durations.jsonl --budget .github/ci-budget.json
+      - name: Data-quality self-check
+        run: python3 tools/ci/job_durations.py quality --dataset ci-metrics/durations.jsonl
       - name: Save duration dataset
         uses: actions/cache/save@v4
         with:
